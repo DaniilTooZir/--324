@@ -1,0 +1,773 @@
+Форма определения уровня физической подготовки
+using System;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using System.Xml.Linq;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement;
+
+namespace Personal_Trainer
+{
+    // Форма для определения уровня подготовки
+    public partial class DefineLevelOfTraining : Form
+    {
+        // Клиент Supabase
+        public Supabase.Client client;
+        // Объект пользователя
+        public User user;
+
+        // Конструктор формы
+        public DefineLevelOfTraining(User user, Supabase.Client client)
+        {
+            this.user = user;
+            InitializeComponent();
+            this.client = client;
+        }
+
+        // Обработчик события клика по кнопке "Определить"
+        private void define_button_Click(object sender, EventArgs e)
+        {
+            //Проверка на слишком большие значения (предотвращение ошибок)
+            if (float.TryParse(bench_input.Text, out float benchMaxx))
+            {
+                if (benchMaxx > 600)
+                {
+                    MessageBox.Show(
+                    "Такого результата пока что не может быть у человека", // Текст сообщения
+                    "Ошибка",                                          // Заголовок окна
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+                    return;
+                }
+            }
+
+            if (float.TryParse(deadLift_input.Text, out float DeadLiftMax))
+            {
+                if (DeadLiftMax > 600)
+                {
+                    MessageBox.Show(
+                    "Такого результата пока что не может быть у человека", // Текст сообщения
+                    "Ошибка",                                          // Заголовок окна
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+                    return;
+                }
+            }
+
+            if (float.TryParse(squat_unput.Text, out float squattMax))
+            {
+                if (squattMax > 600)
+                {
+                    MessageBox.Show(
+                    "Такого результата пока что не может быть у человека", // Текст сообщения
+                    "Ошибка",                                          // Заголовок окна
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+                    return;
+                }
+            }
+
+            // Проверка ввода и преобразование для жима лежа
+            if (!float.TryParse(bench_input.Text, out float benchMax))
+            {
+                MessageBox.Show(
+                    "Введите корректное значение для 1ПМ в жиме лежа", // Текст сообщения
+                    "Ошибка",                                          // Заголовок окна
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+                return;
+            }
+
+            // Проверка ввода и преобразование для становой тяги
+            if (!float.TryParse(deadLift_input.Text, out float deadliftMax))
+            {
+                MessageBox.Show(
+                    "Введите корректное значение для 1ПМ в становой тяге", // Текст сообщения
+                    "Ошибка",                                             // Заголовок окна
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+                return;
+            }
+
+            // Проверка ввода и преобразование для приседа
+            if (!float.TryParse(squat_unput.Text, out float squatMax))
+            {
+                MessageBox.Show(
+                    "Введите корректное значение для 1ПМ в приседе", // Текст сообщения
+                    "Ошибка",                                       // Заголовок окна
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+                return;
+            }
+
+            // Заполнение объекта user результатами
+            user.repMaxBenchPress = benchMax;
+            user.repMaxDeadLift = deadliftMax;
+            user.repMaxSquat = squatMax;
+
+            // Определение уровня тренированности
+            user.DetermineLevelOfTraining();
+
+            // Создание объекта UserDb и заполнение данными
+            UserDb userdb = new UserDb
+            {
+                Login = user.Login,
+                Password = user.Password,
+                Name = user.Name,
+                Weight = user.Weight,
+                Gender = user.Gender,
+                BenchPress = user.repMaxBenchPress,
+                DeadLift = user.repMaxDeadLift,
+                Squat = user.repMaxSquat,
+                LevelOfTraining = user.LevelOfTraining,
+                DailyCalories = user.DailyCalories
+            };
+
+            // Регистрация пользователя в базе данных
+            UserDb.RegisterUserAsync(client, userdb);
+
+            // Отображение уровня тренировки пользователю
+            string levelTraining;
+            switch (user.LevelOfTraining)
+            {
+                case 0: levelTraining = "Начальный уровень подготовки"; break;
+                case 1: levelTraining = "Средний уровень подготовки"; break;
+                case 2: levelTraining = "Продвинутый уровень подготовки"; break;
+                default: levelTraining = "UNKNOWN"; break;
+            }
+
+            MessageBox.Show(
+             "Уровень вашей подготовки - " + levelTraining, // Текст сообщения
+             "Успех",                        // Заголовок окна
+             MessageBoxButtons.OK,           // Кнопка "OK"
+             MessageBoxIcon.Information            // Иконка
+            );
+
+            // Вывод уровня тренированности в консоль (для отладки)
+            Console.WriteLine(user.LevelOfTraining);
+        }
+
+        // Обработчик события клика по кнопке "Сгенерировать программу тренировок"
+        private void button1_Click(object sender, EventArgs e)
+        {
+            GenerateWorkoutProgram generateWorkoutProgram = new GenerateWorkoutProgram(client, user);
+            Close(); // Закрытие текущей формы
+            generateWorkoutProgram.Show();
+        }
+
+        // Обработчик события нажатия клавиши в поле ввода жима лежа
+        private void bench_input_KeyPress(object sender, KeyPressEventArgs e)
+        {
+            // Разрешены только цифры, запятая, точка и backspace
+            if (!char.IsDigit(e.KeyChar) && e.KeyChar != ',' && e.KeyChar != '.' && e.KeyChar != '\b')
+            {
+                e.Handled = true; // Запретить ввод
+            }
+
+            // Запрет ввода минуса
+            if (e.KeyChar == '-')
+            {
+                e.Handled = true;
+            }
+
+            // Разрешить только одну запятую или точку
+            if ((e.KeyChar == ',' || e.KeyChar == '.') && (bench_input.Text.Contains(',') || bench_input.Text.Contains('.')))
+            {
+                e.Handled = true;
+            }
+
+            // Ограничение длины текста до 6 символов
+            if (bench_input.Text.Length >= 6 && e.KeyChar != '\b') // '\b' позволяет удалить символ
+            {
+                e.Handled = true;
+            }
+            //Запрет на начало с запятой или точки
+            if ((e.KeyChar == ',' || e.KeyChar == '.') && bench_input.Text.Length == 0)
+            {
+                e.Handled = true;
+            }
+            //Запрет на ввод 0 в начале
+            if (e.KeyChar == '0' && bench_input.Text.Length == 0)
+            {
+                e.Handled = true;
+            }
+        }
+
+        // Обработчик события нажатия клавиши в поле ввода становой тяги
+        private void deadLift_KeyPress(object sender, KeyPressEventArgs e)
+        {
+            // Разрешены только цифры, запятая, точка и backspace
+            if (!char.IsDigit(e.KeyChar) && e.KeyChar != ',' && e.KeyChar != '.' && e.KeyChar != '\b')
+            {
+                e.Handled = true; // Запретить ввод
+            }
+
+            // Запрет ввода минуса
+            if (e.KeyChar == '-')
+            {
+                e.Handled = true;
+            }
+
+            // Разрешить только одну запятую или точку
+            if ((e.KeyChar == ',' || e.KeyChar == '.') && (deadLift_input.Text.Contains(',') || deadLift_input.Text.Contains('.')))
+            {
+                e.Handled = true;
+            }
+
+            // Ограничение длины текста до 6 символов
+            if (deadLift_input.Text.Length >= 6 && e.KeyChar != '\b') // '\b' позволяет удалить символ
+            {
+                e.Handled = true;
+            }
+            //Запрет на начало с запятой или точки
+            if ((e.KeyChar == ',' || e.KeyChar == '.') && deadLift_input.Text.Length == 0)
+            {
+                e.Handled = true;
+            }
+            //Запрет на ввод 0 в начале
+            if (e.KeyChar == '0' && deadLift_input.Text.Length == 0)
+            {
+                e.Handled = true;
+            }
+        }
+
+        // Обработчик события нажатия клавиши в поле ввода приседа
+        private void squat_KeyPress(object sender, KeyPressEventArgs e)
+        {
+            // Разрешены только цифры, запятая, точка и backspace
+            if (!char.IsDigit(e.KeyChar) && e.KeyChar != ',' && e.KeyChar != '.' && e.KeyChar != '\b')
+            {
+                e.Handled = true; // Запретить ввод
+            }
+
+            // Запрет ввода минуса
+            if (e.KeyChar == '-')
+            {
+                e.Handled = true;
+            }
+
+            // Разрешить только одну запятую или точку
+            if ((e.KeyChar == ',' || e.KeyChar == '.') && (squat_unput.Text.Contains(',') || squat_unput.Text.Contains('.')))
+            {
+                e.Handled = true;
+            }
+
+            // Ограничение длины текста до 6 символов
+            if (squat_unput.Text.Length >= 6 && e.KeyChar != '\b') // '\b' позволяет удалить символ
+            {
+                e.Handled = true;
+            }
+            //Запрет на начало с запятой или точки
+            if ((e.KeyChar == ',' || e.KeyChar == '.') && squat_unput.Text.Length == 0)
+            {
+                e.Handled = true;
+            }
+            //Запрет на ввод 0 в начале
+            if (e.KeyChar == '0' && squat_unput.Text.Length == 0)
+            {
+                e.Handled = true;
+            }
+        }
+
+        // Обработчик события изменения текста в поле ввода жима лежа
+        private void bench_input_TextChanged(object sender, EventArgs e)
+        {
+            // Автоматическая замена точки на запятую
+            if (bench_input.Text.Contains('.'))
+            {
+                bench_input.Text = bench_input.Text.Replace('.', ',');
+                bench_input.SelectionStart = bench_input.Text.Length; // Устанавливаем курсор в конец текста
+            }
+        }
+
+        // Обработчик события изменения текста в поле ввода становой тяги
+        private void deadLift_input_TextChanged(object sender, EventArgs e)
+        {
+            // Автоматическая замена точки на запятую
+            if (deadLift_input.Text.Contains('.'))
+            {
+                deadLift_input.Text = deadLift_input.Text.Replace('.', ',');
+                deadLift_input.SelectionStart = deadLift_input.Text.Length; // Устанавливаем курсор в конец текста
+            }
+        }
+
+        // Обработчик события изменения текста в поле ввода приседа
+        private void squat_input_TextChanged(object sender, EventArgs e)
+        {
+            // Автоматическая замена точки на запятую
+            if (squat_unput.Text.Contains('.'))
+            {
+                squat_unput.Text = squat_unput.Text.Replace('.', ',');
+                squat_unput.SelectionStart = squat_unput.Text.Length; // Устанавливаем курсор в конец текста
+            }
+        }
+    }
+}
+Форма генерации программы тренировок
+
+using Personal_Trainer.Communication_with_db;
+using System;
+using System.Linq;
+using System.Security.Cryptography.X509Certificates;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+
+namespace Personal_Trainer
+{
+    // Форма для генерации программы тренировок
+    public partial class GenerateWorkoutProgram : Form
+    {
+        // Объект пользователя
+        public User user;
+        // Клиент Supabase
+        public Supabase.Client client;
+
+        // Конструктор формы
+        public GenerateWorkoutProgram(Supabase.Client client, User user)
+        {
+            InitializeComponent();
+            this.user = user;
+            this.client = client;
+        }
+
+        // Обработчик события клика по кнопке "Сгенерировать"
+        private async void gererate_butt_Click(object sender, EventArgs e)
+        {
+            string Type;
+            int Duration;
+            int Days_Per_Week;
+
+            // Определение типа программы подготовки (Powerlifting или Bodybuilding)
+            if (type_cmbbx.Text == "powelifting (развитиие силы в трех базовых упражнениях)")
+            {
+                Type = "p"; // Код "p" для Powerlifting
+            }
+            else
+            {
+                Type = "b"; // Код "b" для Bodybuilding
+            }
+
+            // Определение продолжительности программы
+            switch (duration_cmbbx.Text)
+            {
+                case "2 недели":
+                    Duration = 2;
+                    break;
+                case "4 недели":
+                    Duration = 4;
+                    break;
+                case "6 недель":
+                    Duration = 6;
+                    break;
+                default:
+                    Duration = 0; // Значение по умолчанию, если не выбран вариант
+                    break;
+            }
+
+            // Определение количества тренировок в неделю
+            switch (daysPerWeek_cmbbx.Text)
+            {
+                case "2":
+                    Days_Per_Week = 2;
+                    break;
+                case "3":
+                    Days_Per_Week = 3;
+                    break;
+                case "4":
+                    Days_Per_Week = 4;
+                    break;
+                default:
+                    Days_Per_Week = 0; // Значение по умолчанию, если не выбран вариант
+                    break;
+            }
+
+            // Проверка на заполнение всех полей формы
+            while (true)
+            {
+                if (type_cmbbx.Text.Length > 0 && duration_cmbbx.Text.Length > 0 && daysPerWeek_cmbbx.Text.Length > 0)
+                {
+                    break; // Выход из цикла, если все поля заполнены
+                }
+
+                // Сообщения об ошибках, если поля не заполнены
+                if (type_cmbbx.Text.Length == 0)
+                {
+                    MessageBox.Show(
+                        "Выберите тип направления подготовки", // Текст сообщения
+                        "Ошибка",                        // Заголовок окна
+                        MessageBoxButtons.OK,           // Кнопка "OK"
+                        MessageBoxIcon.Error            // Иконка ошибки
+                    );
+                    return;
+                }
+
+                if (duration_cmbbx.Text.Length == 0)
+                {
+                    MessageBox.Show(
+                        "Выберите продолжительность подготовки", // Текст сообщения
+                        "Ошибка",                        // Заголовок окна
+                        MessageBoxButtons.OK,           // Кнопка "OK"
+                        MessageBoxIcon.Error            // Иконка ошибки
+                    );
+                    return;
+                }
+
+                if (daysPerWeek_cmbbx.Text.Length == 0)
+                {
+                    MessageBox.Show(
+                        "Выберите количество тренировок в неделю", // Текст сообщения
+                        "Ошибка",                        // Заголовок окна
+                        MessageBoxButtons.OK,           // Кнопка "OK"
+                        MessageBoxIcon.Error            // Иконка ошибки
+                    );
+                    return;
+                }
+
+            }
+
+            // Создание объекта программы тренировок
+            WorkoutProgram workoutProgram = new WorkoutProgram(Type, Duration, Days_Per_Week);
+            // Получение ID пользователя из базы данных
+            var id = await UserDb.GetUserIdByLoginAsync(client, user.Login) ?? 0;
+            Console.WriteLine(id); // Вывод ID пользователя в консоль (для отладки)
+            // Генерация программы тренировок
+            workoutProgram.GenerateProgram(user);
+
+            // Создание объекта для записи программы тренировок в базу данных
+            WorkoutProgramDb programDb = new WorkoutProgramDb();
+            programDb.UserId = id;
+            programDb.Type = workoutProgram.Type;
+            programDb.Name = "Программа тренировок";
+            programDb.DaysPerWeek = workoutProgram.Days_Per_Week;
+            programDb.Duration = workoutProgram.Duration;
+
+            // Сообщение о генерации программы
+            MessageBox.Show(
+                       "Создаю программу тренировок! Пожалуйста, подождите появление окошка, вас перекинет в личный кабинет", // Текст сообщения
+                       "В процессе",                        // Заголовок окна
+                       MessageBoxButtons.OK,           // Кнопка "OK"
+                       MessageBoxIcon.Information            // Иконка информации
+                   );
+
+            // Запись программы тренировок в базу данных
+            WorkoutProgramDb.RegisterWorkoutProgramAsync(client, programDb, workoutProgram.ExerciseInProgramList);
+
+            // Переход к форме личного кабинета
+            PersonalAccount form1 = new PersonalAccount(client, user);
+            form1.Show();
+            Close(); // Закрытие текущей формы
+            Console.WriteLine(workoutProgram.Path); // Вывод пути к файлу программы тренировок в консоль (для отладки)
+        }
+
+        // Обработчик события клика по кнопке "В личный кабинет"
+        private void toPersAccout_btn_Click(object sender, EventArgs e)
+        {
+            Close(); // Закрытие текущей формы
+            PersonalAccount form = new PersonalAccount(client, user);
+            form.Show();
+        }
+    }
+}
+
+Подсчет суточной нормы КБЖУ
+using System;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+
+namespace Personal_Trainer
+{
+    // Форма для расчета суточной нормы калорий
+    public partial class CountCalories : Form
+    {
+        // Клиент Supabase
+        Supabase.Client client;
+        // Объект пользователя
+        User user;
+
+        // Конструктор формы
+        public CountCalories(Supabase.Client client, User user)
+        {
+            InitializeComponent();
+            this.client = client;
+            this.user = user;
+        }
+
+        // Обработчик события клика по кнопке "Рассчитать"
+        private async void count_btn_Click(object sender, EventArgs e)
+        {
+            // Проверка ввода роста (корректность и положительное значение)
+            if (!int.TryParse(height_input.Text, out int heightn) || heightn <= 0)
+            {
+                MessageBox.Show("Введите корректный рост.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            // Проверка ввода возраста (корректность и положительное значение)
+            if (!int.TryParse(age_input.Text, out int agen) || agen <= 0)
+            {
+                MessageBox.Show("Введите корректный возраст.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            // Проверка на реалистичный диапазон роста
+            if (heightn > 230 || heightn < 40)
+            {
+                MessageBox.Show("Нереальный рост", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            // Проверка на реалистичный диапазон возраста
+            if (agen > 110 || agen < 0)
+            {
+                MessageBox.Show("Нереальный возраст", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            // Определение коэффициента активности
+            float activity;
+            switch (activity_box.Text)
+            {
+                case "Минимальная активность (сидячий образ жизни)":
+                    activity = 1.2f;
+                    break;
+
+                case "Низкая активность (легкие тренировки 1-3 раза в неделю)":
+                    activity = 1.375f;
+                    break;
+
+                case "Средняя активность (умеренные тренировки 3-5 раз в неделю)":
+                    activity = 1.55f;
+                    break;
+
+                case "Высокая активность (интенсивные тренировки 6-7 раз в неделю)":
+                    activity = 1.725f;
+                    break;
+
+                case "Очень высокая активность (тяжелая физическая работа или тренировки 2 раза в день)":
+                    activity = 1.9f;
+                    break;
+
+                default:
+                    MessageBox.Show("Пожалуйста, выберите уровень активности.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+            }
+
+            // Определение коэффициента в зависимости от цели и расчета БЖУ на кг веса
+            float proteinPerKg;
+            float fatPerKg;
+
+            float coef;
+            switch (goal_box.Text)
+            {
+                case "Поддержание веса":
+                    coef = 1.0f; // Коэффициент для поддержания веса
+                    proteinPerKg = 1.5f; // Граммы белка на кг веса
+                    fatPerKg = 1.0f;    // Граммы жира на кг веса
+                    break;
+
+                case "Похудение":
+                    coef = 0.85f; // Коэффициент для похудения
+                    proteinPerKg = 2.0f; // Граммы белка на кг веса
+                    fatPerKg = 0.8f;    // Граммы жира на кг веса
+                    break;
+
+                case "Набор массы":
+                    coef = 1.15f; // Коэффициент для набора массы
+                    proteinPerKg = 1.8f; // Граммы белка на кг веса
+                    fatPerKg = 1.2f;    // Граммы жира на кг веса
+                    break;
+
+                default:
+                    MessageBox.Show("Пожалуйста, выберите цель.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+            }
+
+            // Проверка наличия данных о весе и поле пользователя
+            if (user.Weight <= 0 || string.IsNullOrEmpty(user.Gender.ToString()))
+            {
+                MessageBox.Show("Убедитесь, что введены данные о весе и поле пользователя.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            // Расчет базального метаболизма (BMR) по формуле Миффлина-Сан Жеора
+            float bmr = 10 * user.Weight + 6.25f * heightn - 5 * agen + (user.Gender == 'м' ? 5 : -161);
+
+            // Расчет суточной нормы калорий
+            float dailyCalories = bmr * activity * coef;
+
+            // Расчет макронутриентов (белки, жиры, углеводы)
+            float proteinsGrams = user.Weight * proteinPerKg;
+            float proteinsCalories = proteinsGrams * 4; // Калорийность белков
+
+            float fatsGrams = user.Weight * fatPerKg;
+            float fatsCalories = fatsGrams * 9; // Калорийность жиров
+
+            float carbsCalories = dailyCalories - (proteinsCalories + fatsCalories); // Калорийность углеводов
+            float carbsGrams = carbsCalories / 4; // Граммы углеводов
+
+            // Проверка на отрицательное значение калорийности углеводов
+            if (carbsCalories < 0)
+            {
+                MessageBox.Show("Ошибка в расчете калорий. Проверьте данные.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            // Вывод результатов
+            label2.Text = $"Суточная норма калорий: {dailyCalories:F2} ккал\n" +
+                       $"Белки: {proteinsGrams:F2} г\n" +
+                       $"Жиры: {fatsGrams:F2} г\n" +
+                       $"Углеводы: {carbsGrams:F2} г";
+
+            // Обновление суточной нормы калорий в базе данных
+            user.DailyCalories = dailyCalories;
+            await UserDb.UpdateUserDailyCaloriesAsync(client, user.Login, dailyCalories);
+        }
+    }
+Генерация программы тренировок с прогресс баром
+public static async Task<bool> RegisterProgramWithProgressBar(
+    Supabase.Client client,
+    WorkoutProgramDb programDb,
+    List<ExerciseInProgram>? ExerciseInProgramList,
+    IProgress<int>? progress = null)
+{
+    try
+    {
+        progress?.Report(0); // Устанавливаем прогресс на 0%
+
+        // Вставка программы тренировок
+        var response = await client.From<WorkoutProgramDb>().Insert(programDb);
+
+        // Если успешно вставили программу
+        if (response != null && response.Models.Count > 0)
+        {
+            int programId = response.Models[0].Id; // Получаем ID программы
+
+            Console.WriteLine($"Программа тренировок успешно добавлена с ID: {programId}");
+            progress?.Report(20); // Прогресс 50% после добавления программы
+
+            // Проверяем, что список упражнений не пуст
+            if (ExerciseInProgramList != null && ExerciseInProgramList.Count > 0)
+            {
+                bool exercisesSaved = await ExercisesInProgramDb.SaveExercisesFromProgram(client, programId, ExerciseInProgramList);
+
+                if (exercisesSaved)
+                {
+                    Console.WriteLine("Упражнения успешно добавлены.");
+                    progress?.Report(100); // Прогресс 100% после добавления упражнений
+                    return true;
+                }
+                else
+                {
+                    Console.WriteLine("Ошибка при добавлении упражнений.");
+                    return false;
+                }
+            }
+            else
+            {
+                Console.WriteLine("Список упражнений пуст.");
+                progress?.Report(100); // Прогресс 100%, хотя упражнений нет
+                return false;
+            }
+        }
+        else
+        {
+            Console.WriteLine("Ошибка при добавлении программы тренировок.");
+            return false;
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Ошибка: {ex.Message}");
+        return false;
+    }
+}
+
+Генерация программы тренировок в PDF
+public static void GeneratePdfFromJson(string name, string Path, string outputPdfPath)
+ {
+     // Проверка существования JSON-файла
+     if (!File.Exists(Path))
+     {
+         throw new FileNotFoundException($"Файл {Path} не найден.");
+     }
+
+     // Десериализация JSON
+     string jsonContent = File.ReadAllText(Path);
+     var program = JsonConvert.DeserializeObject<WorkoutProgram>(jsonContent);
+     //WorkoutProgram program = JObject.Parse(jsonContent);
+     Console.WriteLine(program.Days_Per_Week);
+
+     if (program == null || program.ExerciseInProgramList == null)
+     {
+         throw new InvalidDataException("Некорректный формат JSON или отсутствуют данные.");
+     }
+
+     // Создание PDF-документа
+     PdfDocument document = new PdfDocument();
+     document.Info.Title = "Программа тренировок";
+
+     PdfPage page = document.AddPage();
+     XGraphics gfx = XGraphics.FromPdfPage(page);
+     XFont fontTitle = new XFont("Verdana", 20, XFontStyleEx.Bold);
+     XFont fontText = new XFont("Verdana", 12, XFontStyleEx.Regular);
+
+     int yPosition = 50;
+
+     // Заголовок
+     gfx.DrawString("Программа тренировок " + name, fontTitle, XBrushes.Black, new XPoint(50, yPosition));
+     yPosition += 30;
+
+     // Общая информация
+     gfx.DrawString($"Тип: {program.Type ?? "N/A"}", fontText, XBrushes.Black, new XPoint(50, yPosition));
+     yPosition += 20;
+     gfx.DrawString($"Длительность: {program.Duration} недель", fontText, XBrushes.Black, new XPoint(50, yPosition));
+     yPosition += 20;
+     gfx.DrawString($"Дни в неделю: {program.Days_Per_Week}", fontText, XBrushes.Black, new XPoint(50, yPosition));
+     yPosition += 20;
+     gfx.DrawString($"Дата создания: {DateTime.Now}", fontText, XBrushes.Black, new XPoint(50, yPosition));
+     yPosition += 30;
+
+     // Упражнения
+     gfx.DrawString("Упражнения:", fontText, XBrushes.Black, new XPoint(50, yPosition));
+     yPosition += 20;
+     string? previousTrainingDay = null;
+     foreach (var exercise in program.ExerciseInProgramList)
+     {
+         if (exercise.TrainingDay != previousTrainingDay)
+         {
+             gfx.DrawString($"День: {exercise.TrainingDay ?? "N/A"}", fontText, XBrushes.Black, new XPoint(50, yPosition));
+             yPosition += 20;
+             previousTrainingDay = exercise.TrainingDay;  // Обновляем предыдущий день
+         }
+
+         gfx.DrawString($"Упражнение: {exercise.Name ?? "N/A"}", fontText, XBrushes.Black, new XPoint(50, yPosition));
+         yPosition += 20;
+         gfx.DrawString($"  Подходы: {exercise.Sets ?? "N/A"}", fontText, XBrushes.Black, new XPoint(70, yPosition));
+         yPosition += 20;
+         gfx.DrawString($"  Повторения: {exercise.Reps ?? "N/A"}", fontText, XBrushes.Black, new XPoint(70, yPosition));
+         yPosition += 20;
+         gfx.DrawString($"  Вес: {exercise.Weight ?? "N/A"}", fontText, XBrushes.Black, new XPoint(70, yPosition));
+         yPosition += 20;
+         gfx.DrawString($"  Отдых: {exercise.RestAfterSet ?? "N/A"} сек", fontText, XBrushes.Black, new XPoint(70, yPosition));
+         yPosition += 30;
+
+         // Проверка выхода текста за пределы страницы
+         if (yPosition >= page.Height - 50)
+         {
+             page = document.AddPage();
+             gfx = XGraphics.FromPdfPage(page);
+             yPosition = 50;
+         }
+     }
+
+     // Сохранение PDF
+     document.Save(outputPdfPath);
+     Console.WriteLine($"PDF успешно создан: {outputPdfPath}");
+ }
